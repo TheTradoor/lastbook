@@ -18,7 +18,7 @@ The README explains the layout and how to build the apps.
 ## Test
 
 ```bash
-python3 -B -m unittest app.tests.test_readable app.tests.test_bridge app.tests.test_setup app.tests.test_data_folder app.tests.test_what_ships app.tests.test_update app.tests.test_address_search app.tests.test_topic_search app.tests.test_chat_steps app.tests.test_validate_topics app.tests.test_libq app.tests.test_video_transcripts app.tests.test_shell_macos app.tests.test_run_source_linux
+python3 -B -m unittest app.tests.test_readable app.tests.test_bridge app.tests.test_setup app.tests.test_data_folder app.tests.test_what_ships app.tests.test_update app.tests.test_address_search app.tests.test_topic_search app.tests.test_chat_steps app.tests.test_validate_topics app.tests.test_libq app.tests.test_video_transcripts app.tests.test_library_extract app.tests.test_shell_macos app.tests.test_run_source_linux
 ```
 
 Run these before you open a pull request (`test_topic_search` needs Node and is skipped without it; `test_shell_macos` needs a Mac with PyObjC and is skipped elsewhere; `test_run_source_linux` needs bash and is skipped on Windows). If you change the packaging, also run the build for your platform: it ends
@@ -31,6 +31,21 @@ python3 tools/validate_topics.py --data /path/to/LastbookData      # or set LAST
 
 It reads the library's files directly and needs no server. `tools/libq.py` takes the same `--data` and finds and reads
 the page you mean to cite: `python3 tools/libq.py --data /path/to/LastbookData search "boil water"`.
+
+## Rebuild video text in a working library
+
+Video extracts made by the old caption reader are refreshed by the next explicit library build. Later builds also check
+the caption contents and track order before reusing an extract, even when the video checksum has not changed.
+
+Run this on a curator's working library with its source `manifests/*.json` and all referenced files available:
+
+```bash
+LASTBOOK_LIBRARY=/path/to/working-library python3 -B engine/library.py build
+```
+
+The command rebuilds `catalog.json` and `search.sqlite`, and refreshes stale files in `text/`. Publish those changes through
+the existing pack build and checks. Normal app startup does not rewrite installed libraries. This rebuild covers keyword
+search; it does not update the separate meaning-based index.
 
 ## Rules that keep Lastbook what it is
 
