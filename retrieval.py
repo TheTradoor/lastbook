@@ -116,8 +116,12 @@ def chunks_of(text):
 
 def vtt_windows(path, span=45):
     """Timed transcript windows (~45 s) so answers can cite a moment in a video."""
+    return _caption_windows(path.read_bytes(), span)
+
+
+def _caption_windows(data, span=45):
     cues = []
-    for start, lines in caption_blocks(path.read_bytes()):
+    for start, lines in caption_blocks(data):
         cur = [start, '']
         for line in lines:
             t = html.unescape(re.sub(r'<[^>]+>', '', line)).strip()
@@ -140,6 +144,11 @@ def vtt_windows(path, span=45):
     if buf:
         out.append((start or 0, ' '.join(buf)))
     return [(t, norm_ws(x)) for t, x in out if len(x) > 40]
+
+
+def _caption_signature(path, data):
+    # Version the caption reader too, so path-only signatures are refreshed once.
+    return f'vtt:1:{path}:{hashlib.sha256(data).hexdigest()}'
 
 
 class Index:
@@ -256,7 +265,8 @@ class Index:
                 vtts = ([tx['vtt_path']] if tx and tx.get('vtt_path') else []) + [c for c in r.get('captions', []) if c.endswith('.vtt')]
                 vtt = next((v for v in vtts if (LIB / v).is_file()), None)
                 if vtt:
-                    out.append((r['id'], 'vtt:' + vtt, -self.trust_fn(r)[1], ('vtt', vtt)))
+                    sig = _caption_signature(vtt, (LIB / vtt).read_bytes())
+                    out.append((r['id'], sig, -self.trust_fn(r)[1], ('vtt', vtt)))
                 elif tx and (LIB / tx['path']).is_file():
                     out.append((r['id'], 'tx:' + tx['sha256'], -self.trust_fn(r)[1], ('tx', tx)))
         out.sort(key=lambda x: x[2])
@@ -366,9 +376,17 @@ class Index:
                 break
             gap = None
             try:
-                parts = self._texts(doc_id, how)
+                if how[0] == 'vtt':
+                    # Hash and parse the same bytes: the file may have changed since sources() ran.
+                    data = (LIB / how[1]).read_bytes()
+                    sig = _caption_signature(how[1], data)
+                    parts = [(None, t, txt) for t, txt in _caption_windows(data)]
+                else:
+                    parts = self._texts(doc_id, how)
             except Exception as e:
                 parts, gap = [], f'unreadable: {e}'[:200]
+                if how[0] == 'vtt':
+                    sig = None  # retry a failed caption read even if the same bytes return
             if not parts and not gap:
                 gap = 'no extractable text'
             vecs = [self.emb.embed([p[2] for p in parts[i:i + batch]]) for i in range(0, len(parts), batch)]
