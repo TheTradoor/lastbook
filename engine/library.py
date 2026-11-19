@@ -12,6 +12,11 @@ import argparse, collections, concurrent.futures, hashlib, html, http.server, im
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+if __package__:
+ from .saved_pages import caption_blocks
+else:  # direct execution: python3 engine/library.py build
+ from saved_pages import caption_blocks
+
 FROZEN=bool(getattr(sys,'frozen',False))
 ROOT=Path(os.environ['LASTBOOK_LIBRARY']).resolve() if os.environ.get('LASTBOOK_LIBRARY') else (Path(__file__).resolve().parents[1]/'library-data').resolve()
 VENDOR=ROOT/'tools'/('vendor-py312' if sys.version_info[:2]==(3,12) else 'vendor')
@@ -145,9 +150,17 @@ def extract(r):
    r.update(pages=len(pages),searchability='OCR text: verify against original page',ocr_path=ocr.relative_to(ROOT).as_posix())
    textpath.write_text('\n\f\n'.join(pages),encoding='utf-8');r['text_path']=textpath.relative_to(ROOT).as_posix()
    return r,pages,None
+ video=kind in ['video','mp4','webm','mkv']
+ if video:
+  try:
+   captions=[(c,(ROOT/c).read_bytes()) for c in r.get('captions',[])]
+  except Exception as e:return r,[],str(e)
+  # A video's checksum says nothing about its subtitles. Version 1 also retires extracts made by the old line filter.
+  caption_inputs={'version':1,'files':[[c,hashlib.sha256(data).hexdigest()] for c,data in captions],
+                  'fallback':[r['title'],r.get('notes','')]}
  if meta.exists() and textpath.exists():
   m=json.loads(meta.read_text(encoding='utf-8'))
-  if m.get('sha256')==r.get('sha256'):
+  if m.get('sha256')==r.get('sha256') and (not video or m.get('caption_inputs')==caption_inputs):
    text=textpath.read_text(encoding='utf-8');pages=text.split('\n\f\n');r.update(m.get('details',{}));r['text_path']=textpath.relative_to(ROOT).as_posix();return r,pages,None
  pages=[]
  try:
@@ -177,18 +190,19 @@ def extract(r):
     for n in sorted([n for n in z.namelist() if re.match(r'ppt/slides/slide\d+.xml$',n)],key=lambda n:int(re.search(r'slide(\d+)',n).group(1))):
      pages.append('\n'.join(e.text or '' for e in ET.fromstring(z.read(n)).iter() if e.tag.endswith('}t')))
    r['slides']=len(pages)
-  elif kind in ['video','mp4','webm','mkv']:
+  elif video:
    text=[]
-   for c in r.get('captions',[]):
-    lines=(ROOT/c).read_text(encoding='utf-8',errors='replace').splitlines()
-    for line in lines:
-     line=html.unescape(re.sub('<[^>]+>','',line)).strip()
-     if not line or '-->' in line or line.startswith(('WEBVTT','Kind:','Language:')) or line.isdigit():continue
-     if not text or text[-1]!=line:text.append(line)
+   for _,data in captions:
+    for _,lines in caption_blocks(data):
+     for line in lines:
+      line=html.unescape(re.sub('<[^>]+>','',line)).strip()
+      if line and (not text or text[-1]!=line):text.append(line)
    pages=['\n'.join(text)] if text else [r['title']+'\n'+r.get('notes','')]
   else:pages=[path.read_text(encoding='utf-8',errors='replace')]
   textpath.write_text('\n\f\n'.join(pages),encoding='utf-8')
-  meta.write_text(json.dumps({'sha256':r.get('sha256'),'details':{k:r[k] for k in ['pages','slides','searchability'] if k in r}}),encoding='utf-8')
+  cached={'sha256':r.get('sha256'),'details':{k:r[k] for k in ['pages','slides','searchability'] if k in r}}
+  if video:cached['caption_inputs']=caption_inputs
+  meta.write_text(json.dumps(cached),encoding='utf-8')
   r['text_path']=textpath.relative_to(ROOT).as_posix()
   return r,pages,None
  except Exception as e:return r,[],str(e)
