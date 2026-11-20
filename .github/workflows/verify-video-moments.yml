@@ -1,0 +1,33 @@
+name: Verify saved video moments
+on:
+  push:
+    branches: [verify/saved-video-moments]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install test tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r packaging/linux/requirements_linux.txt playwright==1.62.0
+          .venv/bin/python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Storage and package checks
+        run: .venv/bin/python -B -m unittest -v app.tests.test_video_moments app.tests.test_what_ships
+      - name: Exercise the real player and Saved page
+        run: .venv/bin/python review/video_moments_browser.py
+      - name: Keep screenshots and results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: saved-video-moments-browser-evidence
+          path: review/results/
+          retention-days: 30
