@@ -60,7 +60,11 @@ def exercise(context, base):
     page.on('pageerror', lambda e: errors.append(str(e)))
 
     def watch(t=None):
-        page.goto(base + '/#/watch/demo-video' + ('' if t is None else '?t=' + str(t)))
+        target = base + '/#/watch/demo-video' + ('' if t is None else '?t=' + str(t))
+        if page.url == target:
+            page.reload()
+        else:
+            page.goto(target)
         page.wait_for_function('document.querySelector("#vid")?.readyState >= 1')
         page.locator('#cueQ').wait_for()
 
