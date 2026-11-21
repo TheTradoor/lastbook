@@ -1,19 +1,35 @@
-# Saved video moments: browser evidence
+# Saved video moments: Lastbook 1.1.14 integration
 
-Feature commit: 89fb793a23458cdb77b4713ba688d70fae2310a6
+These screenshots and check results use a synthetic local library and a 90-second test video. They contain no personal library data.
 
-Feature tree: d9cec7846861564548fa30d29e01db4850aa8eab
+- Feature PR: https://github.com/Immortal-Protocols/lastbook/pull/310
+- Tested feature revision: `1927770107c057b97867523a002a5a296cca552a`
+- Feature tree: `39195c91c3f3b57d22987299ce30f1de16c9a055`
+- Upstream main: `dd9bff82a7defbe88c0005a723c47294a21673ff`
+- Verification revision: `5eb2eee32a9437d8decd9116b88236c3ba995472`
+- Successful workflow: https://github.com/TheTradoor/lastbook/actions/runs/44877614272
+- Workflow artifact: `saved-video-moments-browser-evidence`
+- Artifact ZIP SHA-256: `d1dc8260fcc8466329aff0d039f537d89a12c497c89cfef9be07635d34a22f10`
 
-Successful browser verification: https://github.com/TheTradoor/lastbook/actions/runs/44856502786
+## Results
 
-Verification commit: 860ce5db3de4d7e8a0d4808da9d0587b437200b2
+All 52 real Chromium checks in `checks.json` passed against the actual Lastbook HTTP server. No JavaScript page errors or external application requests were recorded.
 
-All 52 checks in checks.json passed. The run used Linux Chromium, the real Lastbook HTTP server and a synthetic 90-second video. It recorded no JavaScript page errors or external application requests during the test.
+The run also passes 13 focused Python feature/package tests, including 21 storage scenarios and 12 Saved-page regression scenarios executed through Node. These counts describe different levels of checks and should not be added together.
 
-The Saved read-error screenshots show the compatibility fix requested in https://github.com/Immortal-Protocols/lastbook/pull/310#issuecomment-7053732426. Malformed or inaccessible Saved data leaves Continue watching and Recently opened available. The checks exercise clearing recent history, actually resuming video, keeping the original Saved bytes, and reopening Saved after reads recover.
+The full contributor suite was run locally with Python 3.12 and Node 24 in the same environment for this revision and clean upstream main. It ran 503 tests for this feature and 501 on main. Both report 4 skips, 13 expected failures, and the same 2 failures plus 2 errors:
 
-The mac and win filenames refer to Lastbook's CSS variants, not native macOS or Windows execution. Native WebViews have not been tested. Narrow screenshots exercise a 120-character unbroken label; full-page screenshots retain the fixed navigation at its viewport position.
+- `Downloads.test_roots_only`: CA certificate count.
+- `Jobs.test_first_run_end_to_end`: recommended pack.
+- `AddressIndexes.test_space_counts_the_map`: missing `map_need_bytes`.
+- `Maps.test_space_counts_the_map`: missing `map_need_bytes`.
 
-The feature and package checks pass (13 Python tests, including 21 storage scenarios and 12 Saved-page regression scenarios). The full contributor suite reports 454 tests on this feature and 452 on the unchanged upstream base 26ea623ec7eed6ed8d0592e5bd4c7cfe7ebad2f6 in the same local environment. Both have the same 2 failures, 2 errors, 4 skips and 13 expected failures. The existing outcomes are Downloads.test_roots_only, Jobs.test_first_run_end_to_end, AddressIndexes.test_space_counts_the_map and Maps.test_space_counts_the_map.
+No new failing test identity was introduced. The full suite is not green.
 
-These screenshots and results are review evidence only. They are not included in the application feature diff.
+## Screenshots
+
+The player screenshots cover light and dark themes with Mac and Windows CSS variants. Narrow screenshots use widths of 320, 375, and 640 pixels with long moment labels. Saved-page screenshots show ordinary moments and deliberately inaccessible Saved storage while Continue watching and Recently opened remain available.
+
+These checks ran in Linux Chromium. Native macOS and Windows WebViews have not been tested.
+
+The verification workflow and this evidence are kept on separate fork branches; they are not part of the feature PR.
