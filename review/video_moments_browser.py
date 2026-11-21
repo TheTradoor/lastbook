@@ -55,6 +55,92 @@ def build_library(data):
         con.execute('CREATE VIRTUAL TABLE pages USING fts5(doc_id UNINDEXED,title,collection,category,path UNINDEXED,page UNINDEXED,body,tokenize="unicode61")')
 
 
+def exercise_saved_read_errors(page, base):
+    target = base + '/#/saved'
+    page.goto(target)
+    page.get_by_role('heading', name='Saved', exact=True).wait_for()
+    page.locator('.moments').wait_for()
+    original = page.evaluate('Object.fromEntries(["sg.saved","sg.recent","sg.vprog"].map(k=>[k,localStorage.getItem(k)]))')
+    recent = [{'key': 'd:demo-manual', 'title': 'Workshop notes', 'href': '#/read/demo-manual', 'sub': 'Manual'}]
+    progress = {'demo-video': {'t': 31, 'd': 90, 'title': 'Workshop demonstration', 'at': 1}}
+
+    def independent_sections(p):
+        return (p.get_by_role('heading', name='Continue watching', exact=True).is_visible()
+                and p.locator('#main a.vcard').is_visible()
+                and p.get_by_role('heading', name='Recently opened', exact=True).is_visible())
+
+    blocked = None
+    try:
+        page.evaluate('([recent,progress])=>{localStorage.setItem("sg.recent",JSON.stringify(recent));localStorage.setItem("sg.vprog",JSON.stringify(progress))}', [recent, progress])
+        for raw in ('{broken', '{}', 'null', '42', '"text"', 'true'):
+            page.evaluate('(raw)=>localStorage.setItem("sg.saved",raw)', raw)
+            page.reload()
+            page.get_by_role('alert').wait_for()
+            check('unreadable Saved keeps history and progress: ' + raw,
+                  page.get_by_role('alert').inner_text() == 'Saved items could not be read. Nothing was changed.'
+                  and independent_sections(page)
+                  and page.locator('#main a.row[href="#/read/demo-manual"]').is_visible()
+                  and page.get_by_text('Nothing saved yet', exact=True).count() == 0)
+            check('unreadable Saved bytes are unchanged: ' + raw, page.evaluate('localStorage.getItem("sg.saved")') == raw)
+
+        page.evaluate('(raw)=>localStorage.setItem("sg.saved",raw)', original['sg.saved'])
+        blocked = page.context.new_page()
+        blocked.on('pageerror', lambda e: errors.append(str(e)))
+        blocked.add_init_script('''
+            window.originalSavedGet = Storage.prototype.getItem;
+            window.originalSavedSet = Storage.prototype.setItem;
+            window.savedWrites = [];
+            Storage.prototype.getItem = function(key) {
+                if (key === 'sg.saved') throw new DOMException('denied', 'SecurityError');
+                return window.originalSavedGet.call(this, key);
+            };
+            Storage.prototype.setItem = function(key, value) {
+                if (key === 'sg.saved') window.savedWrites.push(value);
+                return window.originalSavedSet.call(this, key, value);
+            };
+        ''')
+        blocked.goto(target)
+        blocked.get_by_role('alert').wait_for()
+        check('denied Saved reads keep history and progress available',
+              independent_sections(blocked)
+              and blocked.locator('#main a.row[href="#/read/demo-manual"]').is_visible()
+              and blocked.get_by_text('Nothing saved yet', exact=True).count() == 0)
+        check('denied Saved reads preserve the original list without writing',
+              blocked.evaluate('window.originalSavedGet.call(localStorage,"sg.saved")') == original['sg.saved']
+              and blocked.evaluate('window.savedWrites.length') == 0)
+        blocked.emulate_media(color_scheme='light')
+        blocked.screenshot(path=str(OUT/'saved-read-error-light.png'), full_page=True)
+        blocked.emulate_media(color_scheme='dark')
+        blocked.screenshot(path=str(OUT/'saved-read-error-dark.png'), full_page=True)
+        blocked.get_by_role('button', name='Clear recent list', exact=True).click()
+        blocked.get_by_text('Pages you open will appear here.', exact=True).wait_for()
+        check('Clear recent list still works while Saved cannot be read',
+              independent_sections(blocked)
+              and blocked.get_by_role('alert').is_visible()
+              and blocked.evaluate('localStorage.getItem("sg.recent")') == '[]'
+              and blocked.evaluate('window.originalSavedGet.call(localStorage,"sg.saved")') == original['sg.saved']
+              and blocked.evaluate('window.savedWrites.length') == 0)
+        blocked.locator('#main a.vcard').click()
+        blocked.wait_for_function('document.querySelector("#vid")?.readyState >= 1')
+        blocked.locator('#resYes').click()
+        blocked.wait_for_function('document.querySelector("#vid").currentTime >= 31 && !document.querySelector("#vid").paused')
+        check('Continue watching still resumes video while Saved cannot be read', blocked.locator('#vid').evaluate('(v)=>v.currentTime') < 34)
+        blocked.locator('#vid').evaluate('(v)=>v.pause()')
+        blocked.evaluate('() => {Storage.prototype.getItem=window.originalSavedGet}')
+        blocked.goto(target)
+        blocked.get_by_role('heading', name='Saved', exact=True).wait_for()
+        blocked.locator('.moments').wait_for()
+        check('reopening Saved after reads recover restores all original moments',
+              blocked.locator('#momentList li').count() == 3
+              and blocked.get_by_role('alert').count() == 0
+              and blocked.evaluate('localStorage.getItem("sg.saved")') == original['sg.saved']
+              and blocked.evaluate('window.savedWrites.length') == 0)
+    finally:
+        if blocked:
+            blocked.close()
+        page.evaluate('(items)=>{for(const [key,value] of Object.entries(items)){if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value)}}', original)
+
+
 def exercise(context, base):
     page = context.new_page()
     page.on('pageerror', lambda e: errors.append(str(e)))
@@ -187,6 +273,7 @@ def exercise(context, base):
     page.locator('#momentName').fill('Tools checklist')
     page.locator('#momentName').press('Enter')
     page.set_viewport_size({'width':1440,'height':1050})
+    exercise_saved_read_errors(page, base)
     check('no JavaScript page errors',not errors)
     return page
 

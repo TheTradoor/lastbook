@@ -1197,14 +1197,16 @@ async function collectionPage(name, from) {
 /* -------------------------------------------------------------- saved -- */
 async function savedPage() {
   setTitle('Saved');
-  const all = VideoMoments.readSaved(), moments = all.filter(VideoMoments.isMoment);
+  let all = [], savedError = '';
+  try { all = VideoMoments.readSaved() } catch (e) { savedError = e.message }
+  const moments = all.filter(VideoMoments.isMoment);
   const s = all.filter(x => x && x.kind !== 'video-moment'), r = await recents();
   const li = x => `<li><a class="row" href="${esc(x.href)}"><span class="k">${ico(x.key[0] === 'v' ? 'video' : x.key[0] === 'w' ? 'wiki' : x.key[0] === 't' ? 'book' : x.key[0] === 'a' ? 'ask' : 'page')}</span><span><b>${esc(x.title)}</b><small>${esc(rowSub(x))}</small></span></a></li>`;
   const cont = await resumable();
   const available = new Set(await held([...new Set(moments.map(x => x.videoId))]));
   main.innerHTML = `<h1>Saved</h1><p class="lead">Kept on this device only.</p>
-  ${moments.length ? momentSection() : ''}
-  ${s.length ? `<div class="collection" style="margin-top:18px"><ul class="list">${s.map(li).join('')}</ul></div>` : !moments.length ? `<div class="empty"><span class="e-ico">${ico('save')}</span><b>Nothing saved yet</b><p>Choose Save on any page, video, article or answer to keep it here.</p></div>` : ''}
+  ${savedError ? `<div class="err" role="alert">${esc(savedError)}</div>` : moments.length ? momentSection() : ''}
+  ${s.length ? `<div class="collection" style="margin-top:18px"><ul class="list">${s.map(li).join('')}</ul></div>` : !moments.length && !savedError ? `<div class="empty"><span class="e-ico">${ico('save')}</span><b>Nothing saved yet</b><p>Choose Save on any page, video, article or answer to keep it here.</p></div>` : ''}
   ${cont.length ? secHead('Continue watching') + rail(cont.map(([id, v]) => vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: 'Resume at ' + clock(v.t) })).join('')) : ''}
   ${secHead('Recently opened')}${r.length ? `<div class="collection"><ul class="list">${r.map(li).join('')}</ul></div><p><button class="btn plain" id="clr">Clear recent list</button></p>` : '<div class="empty"><p>Pages you open will appear here.</p></div>'}`;
   if (moments.length) wireMoments({ available });
