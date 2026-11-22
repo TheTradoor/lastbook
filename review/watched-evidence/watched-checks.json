@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "scenario": "fresh_saved_jump",
+      "passed": true
+    },
+    {
+      "scenario": "fresh_player_jump",
+      "passed": true
+    },
+    {
+      "scenario": "fresh_paused_scrub",
+      "passed": true
+    },
+    {
+      "scenario": "explicit_paused_scrub",
+      "passed": true
+    },
+    {
+      "scenario": "paused_scrub_to_end",
+      "passed": true
+    },
+    {
+      "scenario": "crossing_by_playback",
+      "passed": true
+    },
+    {
+      "scenario": "rewatch_after_manual_choice",
+      "passed": true
+    },
+    {
+      "scenario": "end_by_playback",
+      "passed": true
+    },
+    {
+      "scenario": "manual_choice_and_saved_zero",
+      "passed": true
+    },
+    {
+      "scenario": "legacy_completed_progress",
+      "passed": true
+    },
+    {
+      "scenario": "persistence_beyond_recent_limit",
+      "passed": true
+    },
+    {
+      "scenario": "readonly_saved",
+      "passed": true
+    },
+    {
+      "scenario": "layout",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "external_requests": []
+}

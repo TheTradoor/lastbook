@@ -1,0 +1,41 @@
+{
+  "main_commit": "96456866f166d1baa9fed38e11f1df39ecbe94bf",
+  "reviewed_pr_head": "ec84b0d6ea25a8ba232ed72078bcf788201d3645",
+  "integration_before_fix": "f734093f54be5af8c9bd2888c668571f65fc8c3f",
+  "fixed_commit": "e10d6df06e50148fd144a004227290ec471bb3f0",
+  "focused_python_tests": 33,
+  "storage_regressions": {
+    "before": {
+      "passed": 4,
+      "failed": 5
+    },
+    "after": {
+      "passed": 9,
+      "failed": 0
+    }
+  },
+  "full_suite": {
+    "main": {
+      "tests": 568,
+      "failures": [
+        "ERROR: test_space_counts_the_map (app.tests.test_setup.AddressIndexes.test_space_counts_the_map)",
+        "ERROR: test_space_counts_the_map (app.tests.test_setup.Maps.test_space_counts_the_map)",
+        "FAIL: test_first_run_end_to_end (app.tests.test_setup.Jobs.test_first_run_end_to_end)",
+        "FAIL: test_roots_only (app.tests.test_setup.Downloads.test_roots_only)"
+      ],
+      "skipped": 4,
+      "expected_failures": 13
+    },
+    "integration": {
+      "tests": 569,
+      "failures": [
+        "ERROR: test_space_counts_the_map (app.tests.test_setup.AddressIndexes.test_space_counts_the_map)",
+        "ERROR: test_space_counts_the_map (app.tests.test_setup.Maps.test_space_counts_the_map)",
+        "FAIL: test_first_run_end_to_end (app.tests.test_setup.Jobs.test_first_run_end_to_end)",
+        "FAIL: test_roots_only (app.tests.test_setup.Downloads.test_roots_only)"
+      ],
+      "skipped": 4,
+      "expected_failures": 13
+    }
+  }
+}

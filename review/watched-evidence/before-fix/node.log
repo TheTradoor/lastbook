@@ -1,0 +1,30 @@
+PASS an explicit unwatched choice wins over high progress
+PASS an explicit watched choice survives rewinding
+PASS explicit completion survives pruning the resume list
+PASS progress updates preserve saved moments and another video choice
+{"checks":4,"failures":5}
+FAIL a fresh paused seek to 85 does not imply completion
+Expected values to be strictly equal:
+
+true !== false
+
+FAIL a fresh paused seek to 90 does not imply completion
+Expected values to be strictly equal:
+
+true !== false
+
+FAIL legacy completed progress survives replaying an earlier moment
+Expected values to be strictly equal:
+
+false !== true
+
+FAIL legacy incomplete progress stays unwatched after a near-end seek
+Expected values to be strictly equal:
+
+true !== false
+
+FAIL resolved media duration can preserve legacy completion
+Expected values to be strictly equal:
+
+false !== true
+

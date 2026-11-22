@@ -1,0 +1,143 @@
+From e10d6df06e50148fd144a004227290ec471bb3f0 Mon Sep 17 00:00:00 2001
+From: TheTradoor <bollish.sol@gmail.com>
+Date: Sun, 22 Nov 2026 08:31:17 +0700
+Subject: [PATCH] Preserve watched state when saved moments change video
+ progress
+
+---
+ app/tests/test_video_moments.py  |  9 ++++
+ app/tests/video_watched_test.mjs | 80 ++++++++++++++++++++++++++++++++
+ web/app.js                       | 10 +++-
+ 3 files changed, 98 insertions(+), 1 deletion(-)
+ create mode 100644 app/tests/video_watched_test.mjs
+
+diff --git a/app/tests/test_video_moments.py b/app/tests/test_video_moments.py
+index 3e73614..1e76130 100644
+--- a/app/tests/test_video_moments.py
++++ b/app/tests/test_video_moments.py
+@@ -10,6 +10,15 @@ from pathlib import Path
+ 
+ 
+ class VideoMoments(unittest.TestCase):
++    @unittest.skipUnless(shutil.which('node'), 'Node is needed for the video moment tests')
++    def test_moment_progress_preserves_watched_choices(self):
++        result = subprocess.run(
++            [shutil.which('node'), str(Path(__file__).with_name('video_watched_test.mjs'))],
++            capture_output=True, text=True, encoding='utf-8', timeout=30,
++        )
++        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
++        self.assertIn('"checks":9', result.stdout)
++
+     @unittest.skipUnless(shutil.which('node'), 'Node is needed for the video moment tests')
+     def test_saved_positions_and_storage_failures(self):
+         result = subprocess.run(
+diff --git a/app/tests/video_watched_test.mjs b/app/tests/video_watched_test.mjs
+new file mode 100644
+index 0000000..f219c1e
+--- /dev/null
++++ b/app/tests/video_watched_test.mjs
+@@ -0,0 +1,80 @@
++// Exercise the shipped progress/watched storage together. Browser checks separately
++// distinguish actual playback, paused scrubbing and saved-moment navigation.
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import vm from 'node:vm';
++
++const app = readFileSync(process.argv[2] || new URL('../../web/app.js', import.meta.url), 'utf8');
++const start = app.indexOf('// Video watch progress:');
++const end = app.indexOf('\n/* ', start);
++assert.ok(start >= 0 && end > start, 'shipped progress storage is present');
++const source = app.slice(start, end);
++let checks = 0, failures = 0;
++
++function open(progress = {}, watched = {}) {
++  const saved = JSON.stringify([{key:'m:video-a:85',kind:'video-moment',videoId:'video-a',time:85,title:'Final detail'}]);
++  const memory = new Map([['vprog',JSON.stringify(progress)],['vwatched',JSON.stringify(watched)],['saved',saved]]);
++  const writes = [];
++  const context = vm.createContext({store:{
++    get(key, fallback) { return JSON.parse(memory.get(key) || 'null') ?? fallback },
++    set(key, value) { writes.push(key);memory.set(key,JSON.stringify(value)) },
++  }});
++  vm.runInContext(source, context, {filename:'progress storage from app.js'});
++  return {context,memory,writes,saved};
++}
++
++function test(name, run) {
++  try { run();checks++;console.log('PASS '+name) }
++  catch(e) { failures++;console.error('FAIL '+name+'\n'+e.message) }
++}
++
++for (const t of [85,90]) {
++  test('a fresh paused seek to '+t+' does not imply completion', () => {
++    const page=open();
++    page.context.setVprog('video-a',{t,d:90,title:'Workshop demonstration'});
++    assert.equal(page.context.isWatched('video-a',null,{duration:90}),false);
++    assert.equal(JSON.parse(page.memory.get('vprog'))['video-a'].t,t);
++  });
++}
++test('legacy completed progress survives replaying an earlier moment', () => {
++  const page=open({'video-a':{t:85,d:90}});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),true);
++  page.context.setVprog('video-a',{t:31,d:90});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),true);
++});
++test('legacy incomplete progress stays unwatched after a near-end seek', () => {
++  const page=open({'video-a':{t:31,d:90}});
++  page.context.setVprog('video-a',{t:85,d:90});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),false);
++});
++test('resolved media duration can preserve legacy completion', () => {
++  const page=open({'video-a':{t:85}});
++  page.context.setVprog('video-a',{t:31,d:90});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),true);
++});
++test('an explicit unwatched choice wins over high progress', () => {
++  const page=open({'video-a':{t:85,d:90}},{'video-a':false});
++  page.context.setVprog('video-a',{t:89,d:90});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),false);
++});
++test('an explicit watched choice survives rewinding', () => {
++  const page=open({}, {'video-a':true});
++  page.context.setVprog('video-a',{t:31,d:90});
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),true);
++});
++test('explicit completion survives pruning the resume list', () => {
++  const page=open({'video-a':{t:31,d:90,at:1}}, {'video-a':true});
++  for(let i=0;i<61;i++)page.context.setVprog('other-'+i,{t:20,d:90});
++  assert.equal(Object.keys(JSON.parse(page.memory.get('vprog'))).length,60);
++  assert.equal(JSON.parse(page.memory.get('vprog'))['video-a'],undefined);
++  assert.equal(page.context.isWatched('video-a',null,{duration:90}),true);
++});
++test('progress updates preserve saved moments and another video choice', () => {
++  const page=open({}, {'video-b':true});
++  page.context.setVprog('video-a',{t:85,d:90});
++  assert.equal(page.memory.get('saved'),page.saved);
++  assert.equal(page.context.isWatched('video-b'),true);
++  assert.ok(!page.writes.includes('saved'));
++});
++console.log(JSON.stringify({checks,failures}));
++if(failures)process.exitCode=1;
+diff --git a/web/app.js b/web/app.js
+index c6e7079..30d29cb 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -114,7 +114,15 @@ async function recents() {   // documents and videos from another library leave
+   const ok = new Set(await held(ids)), seen = new Set();
+   return r.filter(x => (!/^[dv]:/.test(x.key) || ok.has(x.key.slice(2))) && !seen.has(rowId(x)) && seen.add(rowId(x)));
+ }
+-function setVprog(id, data) { const p = vprog(); p[id] = { ...(p[id] || {}), ...data, at: Date.now() }; const keys = Object.keys(p).sort((a, b) => p[b].at - p[a].at).slice(0, 60); store.set('vprog', Object.fromEntries(keys.map(k => [k, p[k]]))) }
++function setVprog(id, data) {
++  const p = vprog();
++  // Preserve legacy completion before a seek or replay replaces its progress.
++  // New progress alone must not turn an unwatched video into a watched one.
++  if (vwatched()[id] === undefined) setWatched(id, isWatched(id, p[id], { duration: data.d }));
++  p[id] = { ...(p[id] || {}), ...data, at: Date.now() };
++  const keys = Object.keys(p).sort((a, b) => p[b].at - p[a].at).slice(0, 60);
++  store.set('vprog', Object.fromEntries(keys.map(k => [k, p[k]])));
++}
+ 
+ /* --------------------------------------------------------------- data -- */
+ async function api(u, opts) {
+-- 
+2.56.1
+
