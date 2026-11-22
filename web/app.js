@@ -114,7 +114,15 @@ async function recents() {   // documents and videos from another library leave 
   const ok = new Set(await held(ids)), seen = new Set();
   return r.filter(x => (!/^[dv]:/.test(x.key) || ok.has(x.key.slice(2))) && !seen.has(rowId(x)) && seen.add(rowId(x)));
 }
-function setVprog(id, data) { const p = vprog(); p[id] = { ...(p[id] || {}), ...data, at: Date.now() }; const keys = Object.keys(p).sort((a, b) => p[b].at - p[a].at).slice(0, 60); store.set('vprog', Object.fromEntries(keys.map(k => [k, p[k]]))) }
+function setVprog(id, data) {
+  const p = vprog();
+  // Preserve legacy completion before a seek or replay replaces its progress.
+  // New progress alone must not turn an unwatched video into a watched one.
+  if (vwatched()[id] === undefined) setWatched(id, isWatched(id, p[id], { duration: data.d }));
+  p[id] = { ...(p[id] || {}), ...data, at: Date.now() };
+  const keys = Object.keys(p).sort((a, b) => p[b].at - p[a].at).slice(0, 60);
+  store.set('vprog', Object.fromEntries(keys.map(k => [k, p[k]])));
+}
 
 /* --------------------------------------------------------------- data -- */
 async function api(u, opts) {

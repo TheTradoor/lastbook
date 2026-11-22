@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
       - name: Video and package regression tests
-        run: .venv/bin/python -B -m unittest -v app.tests.test_video_moments app.tests.test_video_transcripts app.tests.test_what_ships
+        run: .venv/bin/python -B -m unittest -v app.tests.test_what_ships app.tests.test_video_transcripts app.tests.test_video_moments
       - name: Existing saved-moment browser checks
         run: .venv/bin/python review/video_moments_browser.py
       - name: Watched and saved-moment compatibility
