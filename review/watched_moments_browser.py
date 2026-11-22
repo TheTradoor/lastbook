@@ -4,6 +4,7 @@ Uses real Chromium media events and a synthetic library. No simulated media
 events, personal library, AI runner, or external application requests.
 """
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -16,13 +17,18 @@ from playwright.sync_api import sync_playwright
 from video_moments_browser import build_library
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'review' / 'results'
+OUT = Path(os.environ.get('LASTBOOK_WATCHED_RESULTS', ROOT / 'review' / 'results'))
 OUT.mkdir(parents=True, exist_ok=True)
 results, errors, external = [], [], []
 
 
 def check(label, condition):
     assert condition, label
+
+
+def boot(page, base):
+    page.goto(base + '/#/videos/all')
+    page.locator('#vg a.vcard').first.wait_for()
 
 
 def watch(page, base, stamp=None):
@@ -32,7 +38,8 @@ def watch(page, base, stamp=None):
     else:
         page.goto(target)
     page.locator('#markWatched').wait_for()
-    page.wait_for_function('document.querySelector("#vid")?.readyState >= 2 && !document.querySelector("#vid").seeking')
+    page.wait_for_function('document.querySelector("#vid")?.readyState >= 1 && !document.querySelector("#vid").seeking')
+    page.locator('.cue[data-t="31"]').wait_for()
 
 
 def seek(page, value):
@@ -68,7 +75,8 @@ def open_saved(page, base, stamp):
     page.goto(base + '/#/saved')
     page.locator('.moment-open[href$="?t=' + str(stamp) + '"]').click()
     page.locator('#markWatched').wait_for()
-    page.wait_for_function('(t)=>{const v=document.querySelector("#vid");return v?.readyState>=2 && !v.seeking && Math.abs(v.currentTime-t)<0.2}', arg=stamp)
+    page.wait_for_function('(t)=>{const v=document.querySelector("#vid");return v?.readyState>=1 && !v.seeking && Math.abs(v.currentTime-t)<0.2}', arg=stamp)
+    page.locator('.cue[data-t="31"]').wait_for()
 
 
 def play_through(page, start, target):
@@ -83,9 +91,10 @@ def assert_still_unwatched_after_reload(page, base):
     check('no completion was stored', page.evaluate('vwatched()["demo-video"] !== true'))
     page.reload()
     page.locator('#markWatched').wait_for()
-    page.wait_for_function('document.querySelector("#vid")?.readyState>=2')
+    page.wait_for_function('document.querySelector("#vid")?.readyState>=1')
+    page.locator('.cue[data-t="31"]').wait_for()
     check('reload stays unwatched', not watched(page))
-    page.goto(base + '/#/videos')
+    page.goto(base + '/#/videos/all')
     page.locator('a.vcard').first.wait_for()
     check('video card stays unwatched', page.locator('a.vcard .vcheck').count() == 0)
 
@@ -139,7 +148,7 @@ def crossing_by_playback(page, base):
     play_through(page, 79, 83)
     check('playback crossing marks watched', watched(page) and page.evaluate('vwatched()["demo-video"] === true'))
     check('completion preserves saved moments', saved_moments(page) == original)
-    page.goto(base + '/#/videos')
+    page.goto(base + '/#/videos/all')
     page.locator('a.vcard .vcheck').wait_for()
     check('card shows watched', page.locator('a.vcard .vcheck').count() == 1)
 
@@ -181,7 +190,7 @@ def legacy_completed_progress(page, base):
     watch(page, base)
     check('legacy completed progress remains watched', watched(page))
     seek(page, 31)
-    page.goto(base + '/#/videos')
+    page.goto(base + '/#/videos/all')
     page.locator('a.vcard').first.wait_for()
     check('rewinding does not erase legacy completion', page.locator('a.vcard .vcheck').count() == 1)
 
@@ -251,7 +260,7 @@ def recording(browser, base):
     context.route('**/*',route)
     page=context.new_page()
     page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto(base)
+    boot(page,base)
     seed_moments(page)
     watch(page,base,31)
     page.locator('#markWatched').click()
@@ -301,7 +310,7 @@ def main():
                         page=context.new_page()
                         page.set_default_timeout(10000)
                         page.on('pageerror',lambda e:errors.append(str(e)))
-                        page.goto(base)
+                        boot(page,base)
                         try:
                             scenario(page,base)
                             results.append({'scenario':scenario.__name__,'passed':True})

@@ -1,7 +1,7 @@
 name: Verify watched and saved moments
 on:
   push:
-    branches: [verify/watched-moments]
+    branches: ['verify/watched-moments*']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Install test tools
         run: |
           python3 -m venv .venv
@@ -23,10 +24,14 @@ jobs:
       - name: Video and package regression tests
         run: .venv/bin/python -B -m unittest -v app.tests.test_what_ships app.tests.test_video_transcripts app.tests.test_video_moments
       - name: Existing saved-moment browser checks
+        if: '!cancelled()'
         run: .venv/bin/python review/video_moments_browser.py
       - name: Watched and saved-moment compatibility
         if: '!cancelled()'
         run: .venv/bin/python review/watched_moments_browser.py
+      - name: Confirm regressions on the previous integration
+        if: '!cancelled()'
+        run: .venv/bin/python review/reproduce_watched.py
       - name: Keep screenshots, recording and results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
