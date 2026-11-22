@@ -37,6 +37,7 @@ const I = {
   ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>', prep: '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>',
   shelf: '<path d="M4 4v16M9 4v16M14 5l4 15M3 20h18"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
   play: '<path d="M7 4v16l13-8z"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
   insp: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M15 5v14"/>',
   ask: '<path d="M4 5h16v11H9l-5 4z"/><path d="M9 9.5h6M9 12.5h4"/>', spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
 };
@@ -74,6 +75,10 @@ function toggleSave(item, btn) {
   if (btn) { btn.setAttribute('aria-pressed', isSaved(item.key)); const sp = $('span', btn); if (sp) sp.textContent = isSaved(item.key) ? 'Saved' : 'Save' }
 }
 const saveButton = item => `<button class="btn plain" title="Save" data-save='${esc(JSON.stringify(item))}' aria-pressed="${isSaved(item.key)}">${ico('save')}<span>${isSaved(item.key) ? 'Saved' : 'Save'}</span></button>`;
+const watchedButton = (id, d) => {
+  const w = isWatched(id, null, d);
+  return `<button class="btn plain" id="markWatched" title="${w ? 'Mark as unwatched' : 'Mark as watched'}" aria-pressed="${w}">${ico('check')}<span>${w ? 'Watched' : 'Mark watched'}</span></button>`;
+};
 document.addEventListener('click', e => { const b = e.target.closest('[data-save]'); if (b) toggleSave(JSON.parse(b.dataset.save), b) });
 let toastT;
 function toast(msg) {
@@ -82,6 +87,20 @@ function toast(msg) {
 }
 // Video watch progress: {id: {t, d, title, thumb, at}}
 const vprog = () => store.get('vprog', {});
+// Explicit watched states survive beyond vprog's 60-video limit: {id: boolean}
+const vwatched = () => store.get('vwatched', {});
+function setWatched(id, state) {
+  const w = vwatched();
+  if (state == null) delete w[id]; else w[id] = !!state;
+  store.set('vwatched', w);
+}
+function isWatched(id, p, v) {
+  const w = vwatched();
+  if (w[id] !== undefined) return w[id];
+  p = p || vprog()[id];
+  const dur = (v && v.duration) || (p && p.d);
+  return Boolean(p && p.t && dur && p.t >= dur * 0.9);
+}
 // This device's history is kept for every library opened on it (each download is its own library): show only what the open one holds
 const HELD = {};
 const held = ids => Promise.all(ids.map(id => HELD[id] ?? (HELD[id] = fetch('/api/doc/' + encodeURIComponent(id)).then(r => r.status !== 404 && r.status !== 400).catch(() => true)))).then(ok => ids.filter((_, i) => ok[i]));
@@ -167,9 +186,10 @@ function rowItem(item) {
 function vcard(v, opts = {}) {
   const p = vprog()[v.id];
   const pct = p && p.t && (v.duration || p.d) ? Math.min(100, 100 * p.t / (v.duration || p.d)) : 0;
+  const watched = isWatched(v.id, p, v);
   return `<a class="vcard" href="#/watch/${encodeURIComponent(v.id)}?${fromQ()}" ${opts.style || ''}>
     <span class="vthumb">${v.thumb ? `<img loading="lazy" alt="" src="${fileUrl(v.thumb)}" onerror="this.remove()">` : `<span class="ph">${ico('video')}</span>`}
-      ${v.transcript ? '<span class="cc" title="Has a transcript">CC</span>' : ''}${v.duration ? `<span class="dur">${clock(v.duration)}</span>` : ''}${pct > 2 ? `<span class="prog" style="width:${pct}%"></span>` : ''}<span class="play">${ico('play')}</span></span>
+      ${watched ? `<span class="vcheck" title="Watched" aria-label="Watched">${ico('check')}</span>` : ''}${v.transcript ? '<span class="cc" title="Has a transcript">CC</span>' : ''}${v.duration ? `<span class="dur">${clock(v.duration)}</span>` : ''}${pct > 2 ? `<span class="prog" style="width:${pct}%"></span>` : ''}<span class="play">${ico('play')}</span></span>
     <b>${esc(v.title)}</b><span class="vm">${esc(opts.sub || v.publisher || '')}</span></a>`;
 }
 function rail(html, cls = '') {
@@ -639,7 +659,7 @@ async function watch(id, t, from) {
       <h1 class="vtitle">${esc(d.title)}</h1>
       <div class="vmeta"><b>${esc(d.publisher || '')}</b><span>${fmtDur(d.duration)}</span>${d.upload_date ? `<span>${esc(d.upload_date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3'))}</span>` : ''}<span>${esc(d.trust)}</span></div>
       ${resumeAt ? `<div class="resume" id="resume">You stopped at ${clock(resumeAt)}. <button class="btn" id="resYes">Resume</button><button class="btn plain" id="resNo">Start over</button></div>` : ''}
-      <div class="vactions dock">${saveButton({ key: 'v:' + id, title: d.title, href: selfHref, sub: 'Video · ' + fmtDur(d.duration) })}<a class="btn plain" title="Ask about this video" href="#/ask?about=${encodeURIComponent('video:' + id)}&${fromQ()}" id="askv">${ico('ask')}<span>Ask about this video</span></a></div>
+      <div class="vactions dock">${saveButton({ key: 'v:' + id, title: d.title, href: selfHref, sub: 'Video · ' + fmtDur(d.duration) })}${watchedButton(id, d)}<a class="btn plain" title="Ask about this video" href="#/ask?about=${encodeURIComponent('video:' + id)}&${fromQ()}" id="askv">${ico('ask')}<span>Ask about this video</span></a></div>
       ${momentSection(true)}
       <div class="notice small">A video shows how one person did something. Watching isn’t practice, and it may not match current safety guidance — check a manual for anything risky.</div>
     </div>
@@ -672,9 +692,64 @@ async function watch(id, t, from) {
     $('#resYes').onclick = () => { vid.currentTime = resumeAt; vid.play().catch(() => { }); $('#resume').remove() };
     $('#resNo').onclick = () => { vid.currentTime = 0; vid.play().catch(() => { }); $('#resume').remove() };
   }
+  const updateWatchedBtn = () => {
+    const b = $('#markWatched');
+    if (!b) return;
+    const w = isWatched(id, null, d);
+    if (b.getAttribute('aria-pressed') === String(w)) return;
+    b.setAttribute('aria-pressed', w);
+    b.title = w ? 'Mark as unwatched' : 'Mark as watched';
+    const sp = $('span', b); if (sp) sp.textContent = w ? 'Watched' : 'Mark watched';
+  };
+  const bWatched = $('#markWatched');
+  if (bWatched) {
+    bWatched.onclick = () => {
+      const cur = isWatched(id, null, d);
+      setWatched(id, !cur);
+      updateWatchedBtn();
+      toast(!cur ? 'Marked as watched' : 'Marked as unwatched');
+    };
+  }
   let lastSave = 0;
-  const saveProg = () => { if (vid.currentTime > 3) setVprog(id, { t: vid.currentTime, d: d.duration || vid.duration, title: d.title, thumb: d.thumb }) };
-  vid.addEventListener('timeupdate', () => { if (Date.now() - lastSave > 4000) { lastSave = Date.now(); saveProg() } });
+  let below90 = !((t || resumeAt) && (d.duration || vid.duration) && (t || resumeAt) >= (d.duration || vid.duration) * 0.9);
+  const saveProg = () => {
+    if (vid.currentTime > 3) {
+      setVprog(id, { t: vid.currentTime, d: d.duration || vid.duration, title: d.title, thumb: d.thumb });
+    }
+  };
+  const onSeek = () => {
+    const dur = d.duration || vid.duration;
+    if (dur) below90 = vid.currentTime < dur * 0.9;
+  };
+  vid.addEventListener('seeking', onSeek);
+  vid.addEventListener('seeked', onSeek);
+  vid.addEventListener('loadedmetadata', () => {
+    if (!d.duration && vid.duration) d.duration = vid.duration;
+    const dur = d.duration || vid.duration;
+    if (dur) {
+      const pos = vid.currentTime || t || (resumeAt && $('#resume') ? resumeAt : 0);
+      below90 = pos < dur * 0.9;
+    }
+  });
+  vid.addEventListener('timeupdate', () => {
+    const dur = d.duration || vid.duration;
+    if (dur) {
+      if (vid.currentTime < dur * 0.9) {
+        below90 = true;
+      } else if (below90 && !vid.paused && !vid.seeking) {
+        below90 = false;
+        setWatched(id, true);
+        updateWatchedBtn();
+      }
+    }
+    if (Date.now() - lastSave > 4000) { lastSave = Date.now(); saveProg() }
+  });
+  vid.addEventListener('ended', () => {
+    if (!isWatched(id, null, d)) {
+      setWatched(id, true);
+      updateWatchedBtn();
+    }
+  });
   vid.addEventListener('pause', saveProg);
   leaving = () => { saveProg(); vid.pause() };
   // keep "Ask about this video" pointing at the current moment
