@@ -1,0 +1,32 @@
+name: Record watched and saved moments
+on:
+  push:
+    branches: [verify/watched-recording]
+permissions:
+  contents: read
+jobs:
+  recording:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install recording tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r packaging/linux/requirements_linux.txt playwright==1.62.0
+          .venv/bin/python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Record the tested application
+        run: |
+          .venv/bin/python review/watched_moments_browser.py --record-only
+          ffmpeg -hide_banner -loglevel error -i review/results/watched-moments-demo.webm -c:v libx264 -pix_fmt yuv420p -preset fast -crf 23 -movflags +faststart -an review/results/watched-moments-demo.mp4
+      - name: Keep recording and checks
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: watched-moments-recording
+          path: review/results/
+          retention-days: 30

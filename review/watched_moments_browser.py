@@ -253,7 +253,7 @@ SCENARIOS = [fresh_saved_jump, fresh_player_jump, fresh_paused_scrub,
 
 
 def recording(browser, base):
-    context=browser.new_context(viewport={'width':1280,'height':960},record_video_dir=str(OUT/'recordings'),record_video_size={'width':1280,'height':960})
+    context=browser.new_context(viewport={'width':880,'height':1280},color_scheme='light',record_video_dir=str(OUT/'recordings'),record_video_size={'width':880,'height':1280})
     def route(r):
         if r.request.url.startswith(base+'/'):r.continue_()
         else:external.append(r.request.url);r.abort()
@@ -268,11 +268,14 @@ def recording(browser, base):
     page.locator('#markWatched').click()
     seek(page,85)
     check('recorded paused scrub stays unwatched',not watched(page))
+    page.locator('#vid').hover()
     page.wait_for_timeout(1200)
     page.locator('[data-moment-play="31"]').click()
     page.wait_for_function('document.querySelector("#vid").currentTime>=31')
+    page.locator('#vid').hover()
     page.wait_for_timeout(1000)
     seek(page,87)
+    page.locator('#vid').hover()
     page.locator('#vid').evaluate('(v)=>v.play()')
     page.wait_for_function('document.querySelector("#vid").ended')
     check('recorded playback completion marks watched',watched(page))
@@ -283,7 +286,7 @@ def recording(browser, base):
     video.delete()
 
 
-def main():
+def main(record_only=False):
     with tempfile.TemporaryDirectory(prefix='lastbook-watched-') as folder:
         data=Path(folder)
         build_library(data)
@@ -301,7 +304,7 @@ def main():
                 else:raise RuntimeError('test server did not start')
                 with sync_playwright() as p:
                     browser=p.chromium.launch(headless=True)
-                    for scenario in SCENARIOS:
+                    for scenario in ([] if record_only else SCENARIOS):
                         context=browser.new_context(viewport={'width':1440,'height':1050})
                         def route(r):
                             if r.request.url.startswith(base+'/'):r.continue_()
@@ -324,11 +327,11 @@ def main():
                     browser.close()
             finally:
                 server.terminate();server.wait(timeout=10)
-                (OUT/'watched-checks.json').write_text(json.dumps({'results':results,'errors':errors,'external_requests':external},indent=2))
+                (OUT/'watched-checks.json').write_text(json.dumps({'results':results,'errors':errors,'external_requests':external,'recording_only':record_only},indent=2))
     passed=sum(r['passed'] for r in results)
     print(json.dumps({'passed':passed,'total':len(results),'page_errors':len(errors),'external_requests':len(external)}))
     if passed!=len(results) or errors or external:raise SystemExit(1)
 
 
 if __name__=='__main__':
-    main()
+    main('--record-only' in sys.argv)
